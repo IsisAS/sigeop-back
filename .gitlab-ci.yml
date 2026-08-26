@@ -1,0 +1,37 @@
+variables:
+  # Project
+  PROJECT_CONTEXT: sigeop
+
+  # Images
+  IMAGEM_LATEST: $ARTIFACTORY_REGISTRY/${PROJECT_CONTEXT}/${CI_PROJECT_NAME}:latest
+  IMAGEM_FECHADA: $ARTIFACTORY_REGISTRY/${PROJECT_CONTEXT}/${CI_PROJECT_NAME}:${CI_COMMIT_TAG}
+
+stages:
+  - build
+
+build-latest:
+  stage: build
+  image: 
+    name: docker.artifactory.abin.gov.br/kaniko-project/executor:debug
+    entrypoint: [""]
+  before_script:
+    - echo "{\"auths\":{\"$ARTIFACTORY_REGISTRY\":{\"username\":\"$ARTIFACTORY_USER\",\"password\":\"$ARTIFACTORY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - cat $AC_RAIZ >> /kaniko/ssl/certs/ca-certificates.crt
+  script:
+    - |
+      # Passar o contedo do arquivo AC_RAIZ como build-arg
+      export CERT_CONTENT=$(cat $AC_RAIZ)
+    - executor --force --build-arg AC_RAIZ="$CERT_CONTENT" --build-arg AMBIENTE=dev --verbosity=error --cache=false --context $CI_PROJECT_DIR --dockerfile ./Dockerfile --registry-mirror $ARTIFACTORY_REGISTRY --destination ${IMAGEM_LATEST}
+  only:
+    - develop
+
+build-versao-fechada:
+  stage: build
+  image: docker.artifactory.abin.gov.br/kaniko-project/executor:debug
+  before_script:
+    - echo "{\"auths\":{\"$ARTIFACTORY_REGISTRY\":{\"username\":\"$ARTIFACTORY_USER\",\"password\":\"$ARTIFACTORY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - cat $AC_RAIZ >> /kaniko/ssl/certs/ca-certificates.crt
+  script:
+    - /kaniko/executor --force --build-arg AMBIENTE=production --build-arg AC_RAIZ="$(cat $AC_RAIZ)" --verbosity=error --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile --destination ${IMAGEM_FECHADA}
+  only:
+    - tags

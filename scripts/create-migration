@@ -1,0 +1,132 @@
+#!/bin/bash
+
+# =============================================================================
+# Create Migration Script (Flyway)
+# Uso: create-migration.sh [-p <profile>] <nome_da_migration>
+# Exemplo: create-migration.sh -p homol create_users_table
+# =============================================================================
+
+set -e
+
+# Detectar ambiente: Docker (/migrations montado) ou host (relativo ao script)
+if [ -d "/migrations/db" ]; then
+    BASE_DIR="/migrations"
+else
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+    BASE_DIR="${PROJECT_ROOT}/migrations"
+fi
+
+# Parse flags
+FLAG_PROFILE=""
+while getopts "p:" opt; do
+    case $opt in
+        p) FLAG_PROFILE="$OPTARG" ;;
+        *) echo "Uso: create-migration.sh [-p <profile>] <nome_da_migration>"; exit 1 ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+# Fallback: -p flag > $PROFILE env var > "dev"
+if [ -n "$FLAG_PROFILE" ]; then
+    PROFILE="$FLAG_PROFILE"
+elif [ -z "$PROFILE" ]; then
+    PROFILE="dev"
+fi
+
+# Validar profile
+if [[ "$PROFILE" != "dev" && "$PROFILE" != "homol" && "$PROFILE" != "prod" ]]; then
+    echo "Erro: Profile invalido '$PROFILE'"
+    echo "Profiles validos: dev, homol, prod"
+    exit 1
+fi
+
+MIGRATIONS_DIR="${BASE_DIR}/db/migration/${PROFILE}"
+
+# Validar argumento
+if [ -z "$1" ]; then
+    echo "Erro: Nome da migration obrigatorio"
+    echo ""
+    echo "Uso: create-migration.sh [-p <profile>] <nome_da_migration>"
+    echo "PROFILES: dev/homol/prod"
+    echo ""
+    echo "Exemplos:"
+    echo "  create-migration.sh create_users_table"
+    echo "  create-migration.sh -p homol add_email_index_to_users"
+    echo "  create-migration.sh -p prod alter_users_add_role_id"
+    exit 1
+fi
+
+# Converter nome para snake_case (remove espacos e caracteres especiais)
+MIGRATION_NAME=$(echo "$1" | tr '[:upper:]' '[:lower:]' | tr ' ' '_' | tr '-' '_' | sed 's/[^a-z0-9_]//g')
+
+# Gerar timestamp (formato: YYYYMMDDHHMMSS)
+TIMESTAMP=$(date +"%Y%m%d%H%M%S")
+
+# Nome do arquivo
+FILENAME="V${TIMESTAMP}__${MIGRATION_NAME}.sql"
+FILEPATH="${MIGRATIONS_DIR}/${FILENAME}"
+
+# Criar diretorio se nao existir
+mkdir -p "$MIGRATIONS_DIR"
+
+# Detectar tipo de migration pelo nome
+TEMPLATE=""
+if [[ "$MIGRATION_NAME" == create_* ]]; then
+    # Extrair nome da tabela (create_users_table -> users)
+    TABLE_NAME=$(echo "$MIGRATION_NAME" | sed 's/create_//' | sed 's/_table$//')
+    TEMPLATE="-- Migration: ${MIGRATION_NAME}
+-- Profile: ${PROFILE}
+-- Created at: $(date +"%Y-%m-%d %H:%M:%S")
+
+CREATE TABLE ${TABLE_NAME} (
+    id SERIAL PRIMARY KEY,
+    -- adicione suas colunas aqui
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"
+elif [[ "$MIGRATION_NAME" == add_*_to_* ]]; then
+    # add_column_to_table
+    TABLE_NAME=$(echo "$MIGRATION_NAME" | sed 's/.*_to_//')
+    TEMPLATE="-- Migration: ${MIGRATION_NAME}
+-- Profile: ${PROFILE}
+-- Created at: $(date +"%Y-%m-%d %H:%M:%S")
+
+ALTER TABLE ${TABLE_NAME}
+    ADD COLUMN column_name VARCHAR(255);
+"
+elif [[ "$MIGRATION_NAME" == alter_* ]]; then
+    # alter_users_add_something
+    TABLE_NAME=$(echo "$MIGRATION_NAME" | sed 's/alter_//' | cut -d'_' -f1)
+    TEMPLATE="-- Migration: ${MIGRATION_NAME}
+-- Profile: ${PROFILE}
+-- Created at: $(date +"%Y-%m-%d %H:%M:%S")
+
+ALTER TABLE ${TABLE_NAME}
+    -- adicione suas alteracoes aqui
+;
+"
+elif [[ "$MIGRATION_NAME" == drop_* ]]; then
+    TABLE_NAME=$(echo "$MIGRATION_NAME" | sed 's/drop_//' | sed 's/_table$//')
+    TEMPLATE="-- Migration: ${MIGRATION_NAME}
+-- Profile: ${PROFILE}
+-- Created at: $(date +"%Y-%m-%d %H:%M:%S")
+
+DROP TABLE IF EXISTS ${TABLE_NAME};
+"
+else
+    TEMPLATE="-- Migration: ${MIGRATION_NAME}
+-- Profile: ${PROFILE}
+-- Created at: $(date +"%Y-%m-%d %H:%M:%S")
+
+-- Escreva seu SQL aqui
+"
+fi
+
+# Criar arquivo
+echo "$TEMPLATE" > "$FILEPATH"
+
+echo "Migration criada: ${FILENAME}"
+echo "Profile: ${PROFILE}"
+echo "Path: ${FILEPATH}"

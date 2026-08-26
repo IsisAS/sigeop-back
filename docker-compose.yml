@@ -1,0 +1,115 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api
+    environment:
+      PROFILE: ${PROFILE:-dev}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/sigeop}
+      APP_NAME: api
+      APP_VERSION: ${APP_VERSION:-1.0.0}
+      CICLO_BASE_URL: ${CICLO_BASE_URL:-https://ciclo.dev.abin.gov.br/services/v1}
+      CICLO_API_KEY: ${CICLO_API_KEY:-douglasgato}
+      CICLO_CACHE_TTL: ${CICLO_CACHE_TTL:-3600}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:4200}
+      REDIS_SERVER: ${REDIS_SERVER:-redis://redis:6379/0}
+      PREFIX_ROUTER: ${PREFIX_ROUTER:-/api/1.0.0}
+    ports:
+      - "82:8000"
+    volumes:
+      - .:/app
+    restart: unless-stopped
+
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api-test
+    environment:
+      - PROFILE=${PROFILE:-dev}
+    volumes:
+      - .:/app
+      - ./coverage:/app/coverage
+    command: pytest --cov=src --cov-report=term-missing --cov-report=html:coverage/html
+    profiles:
+      - test
+
+  postgres:
+    image: postgres:16.11-alpine3.22
+    container_name: db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sigeop
+    ports:
+      - "81:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sigeop"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  
+  flyway:
+    image: flyway/flyway:10-alpine
+    container_name: flyway
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../db-migration/db/migration/${PROFILE:-dev}:/flyway/sql:ro
+    command: >
+      -url=jdbc:postgresql://db:5432/sigeop
+      -user=postgres
+      -password=postgres
+      -connectRetries=5
+      migrate
+    environment:
+      - FLYWAY_URL=jdbc:postgresql://db:5432/sigeop
+      - FLYWAY_USER=postgres
+      - FLYWAY_PASSWORD=postgres
+      - FLYWAY_CONNECT_RETRIES=5
+      - FLYWAY_BASELINE_ON_MIGRATE=true
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    restart: unless-stopped
+    ports:
+      - 85:80
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+  
+  # redis:
+  #   image: redis/redis-stack-server:7.4.0-v0-x86_64
+  #   container_name: redis
+  #   ports:
+  #     - "86:6379"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 10
+  #   restart: unless-stopped
+  
+  # redisinsight:
+  #   image: redis/redisinsight:latest
+  #   container_name: redis-ui
+  #   ports:
+  #     - "83:5540"
+  #   volumes:
+  #     - redis-ui-data:/data
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+
+
+volumes:
+  postgres_data:
+  redis-ui-data:
+
