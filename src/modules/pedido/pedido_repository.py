@@ -200,17 +200,12 @@ class PedidoRepository(AbstractRepository[PedidoModel, PedidoCreateDTO, PedidoUp
             # Se já existia anteriormente mas foi excluído, cria um novo registro (mantém histórico)
             for ud in unidades_destinatarias:
                 if ud.cod_unidade_destinataria not in codigos_ativos:
-                    # Create fake unit data if real data is not provided
-                    fake_sigla = f"UD{ud.cod_unidade_destinataria:04d}"
-                    fake_nome = f"Unidade Destinatária Fake {ud.cod_unidade_destinataria}"
-                    fake_arvore = f"ROOT/SP/SAO_PAULO/{fake_sigla}"
-                    
                     vinculo_ud = UnidadeDestinatariaModel(
                         cod_pedido=entity_id,
                         cod_unidade_destinataria=ud.cod_unidade_destinataria,
-                        sig_unidade_destinataria=ud.sig_unidade_destinataria or fake_sigla,
-                        nom_unidade_destinataria=ud.nom_unidade_destinataria or fake_nome,
-                        dsc_arvore_unidade_destinataria=ud.dsc_arvore_unidade_destinataria or fake_arvore,
+                        sig_unidade_destinataria=ud.sig_unidade_destinataria,
+                        nom_unidade_destinataria=ud.nom_unidade_destinataria,
+                        dsc_arvore_unidade_destinataria=ud.dsc_arvore_unidade_destinataria,
                         cif_usuario_inc=db_obj.cif_usuario_inc,
                         cif_usuario_alt=obj_in.cif_usuario_alt,
                         flg_reg_excluido=False,
