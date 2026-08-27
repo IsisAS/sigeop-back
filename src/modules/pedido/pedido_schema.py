@@ -72,8 +72,8 @@ class PedidoUpdateDTO(UpdateSchema):
     dat_hor_alteracao: datetime | None = None
 
     analistas: Optional[list[AnalistaDTO]] = Field(default=[], description="Lista de IDs dos agentes analistas")
-    unidades_destinatarias: list[int] | None = None
-
+    unidades_destinatarias: list[int] | None = None 
+    
 class PedidoReadDTO(ReadSchema):
     cod_pedido: int
     cod_caso: int | None = None

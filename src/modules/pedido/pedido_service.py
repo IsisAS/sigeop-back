@@ -102,18 +102,22 @@ class PedidoService(AbstractService[PedidoModel, PedidoCreateDTO, PedidoReadDTO,
     def create(self, dto: PedidoCreateDTO) -> PedidoReadDTO:
         if not dto.num_pedido:
             dto.num_pedido = self._generate_num_pedido(dto.num_ano)
-
+        
         item = self.repository.create(dto)
         return self.read_dto.model_validate(self._with_unidades(item))
 
     def _generate_num_pedido(self, num_ano: int) -> str:
+        """
+        Gera número de pedido no formato PED-NNNN (até 4 dígitos)
+        Busca o maior número existente para o ano e incrementa
+        """
         from sqlalchemy import func, text
         db = self.repository.db
-
+        
         pedidos = db.query(self.repository.model.num_pedido).filter(
             self.repository.model.num_ano == num_ano
         ).all()
-
+        
         max_num = 0
         for (num_pedido,) in pedidos:
             if num_pedido and '-' in num_pedido:
@@ -122,12 +126,12 @@ class PedidoService(AbstractService[PedidoModel, PedidoCreateDTO, PedidoReadDTO,
                     max_num = max(max_num, num_part)
                 except (ValueError, IndexError):
                     pass
-
+        
         next_num = max_num + 1
-
+        
         if next_num > 9999:
             raise ValueError(f"Limite de pedidos ({max_num}) atingido para o ano {num_ano}")
-
+        
         return f"PED-{next_num:04d}"
 
 
@@ -153,7 +157,7 @@ class PedidoService(AbstractService[PedidoModel, PedidoCreateDTO, PedidoReadDTO,
         items = self.repository.list_by_original_id(cod_pedido_original)
         enriched = [self._with_analistas_nome(item) for item in self._with_unidades_many(items)]
         return [self.read_dto.model_validate(item) for item in enriched]
-
+    
     def get_pedidos_elegiveis_para_caso(
         self,
         limit: int = 100,

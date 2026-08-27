@@ -76,23 +76,23 @@ class PedidoRepository(AbstractRepository[PedidoModel, PedidoCreateDTO, PedidoUp
             exclude={"analistas", "cod_caso", "cod_casos", "cod_pedido_tipo", "cod_pedido_original"}
         )
         pedido_data["cod_pedido_relacionado"] = cod_pedido_relacionado
-
+        
         db_obj = self.model(**pedido_data)
         self.db.add(db_obj)
-
+        
         self.db.flush()
-
+                
         if hasattr(obj_in, 'analistas') and obj_in.analistas:
             for analista_in in obj_in.analistas:
                 vinculo_analista = AnalistaModel(
                     cod_pedido=db_obj.cod_pedido,
                     cod_agente=analista_in.cod_agente,
-                    flg_titular=analista_in.flg_titular,
+                    flg_titular=analista_in.flg_titular, 
                     cif_usuario_inc=obj_in.cif_usuario_inc,
                     cif_usuario_alt=obj_in.cif_usuario_alt,
                     flg_reg_excluido=False
                 )
-                self.db.add(vinculo_analista)
+                self.db.add(vinculo_analista)        
 
         if pedido_principal and obj_in.dat_prazo > pedido_principal.dat_prazo:
             pedido_principal.dat_prazo = obj_in.dat_prazo
@@ -108,7 +108,7 @@ class PedidoRepository(AbstractRepository[PedidoModel, PedidoCreateDTO, PedidoUp
 
         self.db.commit()
         self.db.refresh(db_obj)
-
+        
         return self.get_by_id(db_obj.cod_pedido)
     
     def get(self, entity_id: Any) -> dict[str, Any]:
@@ -117,17 +117,13 @@ class PedidoRepository(AbstractRepository[PedidoModel, PedidoCreateDTO, PedidoUp
             raise NotFoundError(f"{self.model.__name__}({entity_id}) não encontrado.")
         return result
 
-    def update(
-        self,
-        entity_id: Any,
-        obj_in: PedidoUpdateDTO,
-        *,
-        unidades_destinatarias: list[UnidadeDestinatariaDTO] | None = None,
-    ) -> dict[str, Any]:
+    def update(self, entity_id: Any, 
+        obj_in: PedidoUpdateDTO,  
+        unidades_destinatarias: list[UnidadeDestinatariaDTO] | None = None,) -> dict[str, Any]:
         db_obj = self.db.query(PedidoModel).filter(PedidoModel.cod_pedido == entity_id).first()
         if not db_obj:
             raise ValueError(f"Pedido with id {entity_id} not found")
-
+        
         pedido_data = obj_in.model_dump(
             exclude={"analistas", "cod_caso", "cod_casos", "cod_pedido_tipo", "cod_pedido_original", "unidades_destinatarias"},
             exclude_unset=True,
@@ -137,22 +133,22 @@ class PedidoRepository(AbstractRepository[PedidoModel, PedidoCreateDTO, PedidoUp
         for field, value in pedido_data.items():
             if hasattr(db_obj, field):
                 setattr(db_obj, field, value)
-
+        
         if hasattr(obj_in, 'analistas'):
             vinculos_existentes = self.db.query(AnalistaModel).filter(
                 AnalistaModel.cod_pedido == entity_id
             ).all()
-
+            
             analistas_enviados = {(a.cod_agente, a.flg_titular, a.flg_reg_excluido) for a in obj_in.analistas or []}
             for vinculo in vinculos_existentes:
                 chave = (vinculo.cod_agente, vinculo.flg_titular, vinculo.flg_reg_excluido)
                 if chave not in analistas_enviados:
                     vinculo.flg_reg_excluido = True
                     vinculo.cif_usuario_alt = obj_in.cif_usuario_alt
-
+            
             for analista_in in obj_in.analistas or []:
                 vinculo_existente = next(
-                    (v for v in vinculos_existentes if v.cod_agente == analista_in.cod_agente),
+                    (v for v in vinculos_existentes if v.cod_agente == analista_in.cod_agente), 
                     None
                 )
                 if vinculo_existente:
@@ -169,7 +165,7 @@ class PedidoRepository(AbstractRepository[PedidoModel, PedidoCreateDTO, PedidoUp
                         flg_reg_excluido=analista_in.flg_reg_excluido
                     )
                     self.db.add(vinculo_analista)
-
+        
         if obj_in.analistas:
             analistas_ativos = [a for a in obj_in.analistas if not a.flg_reg_excluido]
             titulares = [a for a in analistas_ativos if a.flg_titular]
@@ -190,14 +186,12 @@ class PedidoRepository(AbstractRepository[PedidoModel, PedidoCreateDTO, PedidoUp
             codigos_solicitados = {ud.cod_unidade_destinataria for ud in unidades_destinatarias}
             codigos_ativos = {v.cod_unidade_destinataria for v in vinculos_ativos}
 
-            # Regra 1: existe no banco (ativo) e NÃO veio no payload → remover (exclusão lógica)
             for vinculo in vinculos_ativos:
                 if vinculo.cod_unidade_destinataria not in codigos_solicitados:
                     vinculo.flg_reg_excluido = True
                     vinculo.cif_usuario_alt = obj_in.cif_usuario_alt
 
-            # Regra 2: veio no payload e NÃO existe no banco (ativo) → criar
-            # Se já existia anteriormente mas foi excluído, cria um novo registro (mantém histórico)
+
             for ud in unidades_destinatarias:
                 if ud.cod_unidade_destinataria not in codigos_ativos:
                     vinculo_ud = UnidadeDestinatariaModel(
@@ -211,7 +205,7 @@ class PedidoRepository(AbstractRepository[PedidoModel, PedidoCreateDTO, PedidoUp
                         flg_reg_excluido=False,
                     )
                     self.db.add(vinculo_ud)
-
+                    
         cod_casos = self._obter_cod_casos_do_payload(obj_in)
         if cod_casos is not None:
             self.sincronizar_casos_vinculados(
@@ -219,11 +213,12 @@ class PedidoRepository(AbstractRepository[PedidoModel, PedidoCreateDTO, PedidoUp
                 cod_casos=cod_casos,
                 cif_usuario=obj_in.cif_usuario_alt,
             )
-
+        
         self.db.commit()
         self.db.refresh(db_obj)
-
+        
         return self.get_by_id(entity_id)
+
 
     def list(self, *, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
         pedido = PedidoModel.__table__

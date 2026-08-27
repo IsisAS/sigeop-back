@@ -9,8 +9,8 @@ from src.modules.ciclo.ciclo_service import CicloService
 from src.modules.pedido.pedido_repository import PedidoRepository
 from src.modules.pedido.pedido_schema import PedidoCreateDTO, PedidoReadDTO, PedidoUpdateDTO, PedidoElegivelDTO
 from src.modules.pedido.pedido_service import PedidoService
-# # from src.app_auth import APP_PERMISSIONS
-# # from src.core.auth.authorization import crud_permission_dependencies
+# from src.app_auth import APP_PERMISSIONS
+# from src.core.auth.authorization import crud_permission_dependencies
 from fastapi import APIRouter, Query
 from src.modules.pedido.pedido_schema import JustificacaoExclusaoDTO
 
@@ -86,7 +86,7 @@ crud = CrudRouter(
     id_param="cod_pedido",
     id_description="ID do pedido",
     operations={"list", "get", "create", "update"},
-    # # route_dependencies=crud_permission_dependencies(APP_PERMISSIONS.pedido),
+    # route_dependencies=crud_permission_dependencies(APP_PERMISSIONS.pedido),
 )
 
 router = APIRouter()
